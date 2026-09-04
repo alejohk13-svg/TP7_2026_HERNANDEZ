@@ -76,6 +76,7 @@
 									<listOptionValue builtIn="false" value="&quot;C:\Users\alejo\OneDrive\Desktop\UTN\Tecnicas Digitales II\Laboratorios\TP7_2026_Hernandez\pwm&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\Users\alejo\OneDrive\Desktop\UTN\Tecnicas Digitales II\Laboratorios\TP7_2026_Hernandez\Teclado&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;C:\Users\alejo\OneDrive\Desktop\UTN\Tecnicas Digitales II\Laboratorios\TP7_2026_Hernandez\usart&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Users\alejo\OneDrive\Desktop\UTN\Tecnicas Digitales II\Laboratorios\TP7_2026_Hernandez\sd&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1602142337" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 								<inputType id="fr.ac6.managedbuild.tool.gnu.cross.assembler.input.353915950" superClass="fr.ac6.managedbuild.tool.gnu.cross.assembler.input"/>
@@ -90,6 +91,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="Teclado"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="ev1527"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="pwm"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="sd"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="startup"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="usart"/>

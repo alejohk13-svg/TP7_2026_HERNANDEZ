@@ -59,7 +59,10 @@ void USART_MostrarMenuPrincipal(void)
     USART_SendString("1. Control de DAC\r\n");
     USART_SendString("2. Lectura RF\r\n");
     USART_SendString("3. Control Baudrate\r\n");
-    USART_SendString("Seleccione una opcion (1-3): ");
+    USART_SendString("4. Log de texto\r\n");
+    USART_SendString("5. Agregar datos\r\n");
+    USART_SendString("6. Borrar archivo\r\n");
+    USART_SendString("Seleccione una opcion (1-6): ");
 }
 
 void USART_Task(void)
@@ -152,9 +155,13 @@ void USART_Task(void)
                                 estadoMenu = UART_MENU_CONFIG;
                                 USART_SendString("Ingrese nuevo baudrate (ej. 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200): ");
                             }
+                            else if (opcion >= 4 && opcion <= 6)
+                            {
+                                USART_MostrarMenuPrincipal();
+                            }
                             else
                             {
-                                USART_SendString("ERROR: Opcion invalida. Ingrese 1, 2 o 3.\r\n");
+                                USART_SendString("ERROR: Opcion invalida. Ingrese un numero del 1 al 6.\r\n");
                                 USART_MostrarMenuPrincipal();
                             }
                         }
