@@ -11,6 +11,7 @@
 
 #include "../GLOBAL/global.h"
 #include "../ev1527/ev1527.h"
+#include "../sd/sd.h"
 
 #define USARTx                   USART2
 #define USARTx_CLK               RCC_APB1Periph_USART2
@@ -28,7 +29,9 @@ typedef enum {
     UART_MENU_MAIN = 0,
     UART_MENU_DAC,
     UART_MENU_RF,
-    UART_MENU_CONFIG
+    UART_MENU_CONFIG,
+    UART_MENU_LOG_FILENAME,
+    UART_MENU_LOG_DATA
 } UART_MenuState_t;
 
 void USARTx_Init(uint32_t baudrate);

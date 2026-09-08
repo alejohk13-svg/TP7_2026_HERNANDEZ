@@ -1,12 +1,16 @@
 #include "usart.h"
 #include "../GLOBAL/global.h"
 #include "../ev1527/ev1527.h"
+#include "../sd/sd.h"
 
 static UART_MenuState_t estadoMenu = UART_MENU_MAIN;
-static char rxBuffer[32];
+static char rxBuffer[128];
 static uint8_t rxIndex = 0;
 
-// Variables filtro anti-rebote de RF
+static char logFilename[32];
+static char logDataBuffer[512];
+static uint16_t logDataIndex = 0;
+
 static uint32_t ultimo_tiempo_rf = 0;
 static uint32_t ultimo_codigo_rf = 0;
 
@@ -74,8 +78,8 @@ void USART_Task(void)
             uint32_t codigo = EV1527_GetCodigo();
             uint32_t tiempo_actual = getSystick();
 
-            // Filtro anti-rebote: descarta si es el mismo código dentro de 350 ms
-            if (codigo != ultimo_codigo_rf || (tiempo_actual - ultimo_tiempo_rf) > 350)
+            if (codigo != ultimo_codigo_rf ||
+                (tiempo_actual - ultimo_tiempo_rf) > 350)
             {
                 ultimo_codigo_rf = codigo;
                 ultimo_tiempo_rf = tiempo_actual;
@@ -88,18 +92,22 @@ void USART_Task(void)
                         sprintf(msg, "[RF] ID Boton: 0x%06X | Boton A presionado!\r\n", (unsigned int)codigo);
                         USART_SendString(msg);
                         break;
+
                     case EV1527_BOTON_B:
                         sprintf(msg, "[RF] ID Boton: 0x%06X | Boton B presionado!\r\n", (unsigned int)codigo);
                         USART_SendString(msg);
                         break;
+
                     case EV1527_BOTON_C:
                         sprintf(msg, "[RF] ID Boton: 0x%06X | Boton C presionado!\r\n", (unsigned int)codigo);
                         USART_SendString(msg);
                         break;
+
                     case EV1527_BOTON_D:
                         sprintf(msg, "[RF] ID Boton: 0x%06X | Boton D presionado!\r\n", (unsigned int)codigo);
                         USART_SendString(msg);
                         break;
+
                     default:
                         sprintf(msg, "[RF] ID Boton: 0x%06X (Desconocido)\r\n", (unsigned int)codigo);
                         USART_SendString(msg);
@@ -113,9 +121,70 @@ void USART_Task(void)
     {
         char c = (char)USART_ReceiveData(USARTx);
 
+        if (c == 27)
+        {
+            if (estadoMenu == UART_MENU_LOG_DATA)
+            {
+                logDataBuffer[logDataIndex] = '\0';
+
+                USART_SendString("\r\nGuardando en uSD...\r\n");
+
+                FRESULT res = SD_Log_CrearYEscribir(logFilename, logDataBuffer);
+
+                if (res == FR_OK)
+                {
+                    USART_SendString("[OK] Archivo guardado correctamente\r\n");
+                }
+                else
+                {
+                    USART_SendString("[ERROR] Fallo al guardar en uSD\r\n");
+                }
+            }
+
+            rxIndex = 0;
+            logDataIndex = 0;
+            estadoMenu = UART_MENU_MAIN;
+            USART_MostrarMenuPrincipal();
+            return;
+        }
+
+        if (estadoMenu == UART_MENU_LOG_DATA)
+        {
+            if (c == '\r')
+            {
+                if (logDataIndex < (sizeof(logDataBuffer) - 1))
+                {
+                    logDataBuffer[logDataIndex++] = '\n';
+                }
+            }
+            else if (c == '\n')
+            {
+                /* Ignora LF si la terminal ya envio CR. */
+            }
+            else if (c == 8 || c == 127)
+            {
+                if (logDataIndex > 0)
+                {
+                    logDataIndex--;
+                }
+            }
+            else
+            {
+                if (logDataIndex < (sizeof(logDataBuffer) - 1))
+                {
+                    logDataBuffer[logDataIndex++] = c;
+                }
+            }
+
+            return;
+        }
+
         if (c == '\r' || c == '\n')
         {
-            USART_SendString("\r\n");
+            if (c == '\r')
+            {
+                USART_SendString("\r\n");
+            }
 
             if (rxIndex > 0)
             {
@@ -148,15 +217,21 @@ void USART_Task(void)
                             {
                                 estadoMenu = UART_MENU_RF;
                                 USART_SendString("\r\n--- LECTURA RF EN VIVO ---\r\n");
-                                USART_SendString("Presione botones del mando RF. Presione ENTER vacio para salir...\r\n");
+                                USART_SendString("Presione botones del mando RF. Presione ESC para salir...\r\n");
                             }
                             else if (opcion == 3)
                             {
                                 estadoMenu = UART_MENU_CONFIG;
-                                USART_SendString("Ingrese nuevo baudrate (ej. 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200): ");
+                                USART_SendString("Ingrese nuevo baudrate: ");
                             }
-                            else if (opcion >= 4 && opcion <= 6)
+                            else if (opcion == 4)
                             {
+                                estadoMenu = UART_MENU_LOG_FILENAME;
+                                USART_SendString("Nombre de archivo: ");
+                            }
+                            else if (opcion == 5 || opcion == 6)
+                            {
+                                USART_SendString("Opcion en desarrollo...\r\n");
                                 USART_MostrarMenuPrincipal();
                             }
                             else
@@ -170,9 +245,40 @@ void USART_Task(void)
                             USART_SendString("ERROR: Entrada no valida.\r\n");
                             USART_MostrarMenuPrincipal();
                         }
+
                         break;
                     }
 
+                    case UART_MENU_LOG_FILENAME:
+                    {
+                        USART_SendString("Verificando archivo en microSD...\r\n");
+
+                        FRESULT res = SD_Log_ExisteArchivo(rxBuffer);
+
+                        if (res == FR_OK)
+                        {
+                            USART_SendString("ERROR: archivo ya existente.\r\n");
+                            USART_SendString("Ingrese un nuevo nombre de archivo: ");
+                            break;
+                        }
+
+                        if (res != FR_NO_FILE)
+                        {
+                            USART_SendString("ERROR: no se pudo verificar la microSD.\r\n");
+                            USART_SendString("Nombre de archivo: ");
+                            break;
+                        }
+
+                        strncpy(logFilename, rxBuffer, sizeof(logFilename) - 1);
+                        logFilename[sizeof(logFilename) - 1] = '\0';
+
+                        logDataIndex = 0;
+                        memset(logDataBuffer, 0, sizeof(logDataBuffer));
+
+                        estadoMenu = UART_MENU_LOG_DATA;
+                        USART_SendString("Ingrese Datos (Presione ESC para finalizar y guardar):\r\n");
+                        break;
+                    }
                     case UART_MENU_DAC:
                     {
                         int mv = 0;
@@ -204,12 +310,13 @@ void USART_Task(void)
                             USART_SendString("ERROR: Debe ingresar un valor puramente numerico.\r\n");
                             USART_SendString("Ingrese valor milivoltios (0 a 3300 mV): ");
                         }
+
                         break;
                     }
 
                     case UART_MENU_RF:
                     {
-                        USART_SendString("Presione ENTER vacio para salir del modo RF.\r\n");
+                        USART_SendString("Presione ESC para salir del modo RF.\r\n");
                         break;
                     }
 
@@ -244,6 +351,7 @@ void USART_Task(void)
                             USART_SendString("ERROR: Debe ingresar un valor puramente numerico.\r\n");
                             USART_SendString("Ingrese nuevo baudrate: ");
                         }
+
                         break;
                     }
 
@@ -261,8 +369,16 @@ void USART_Task(void)
                 {
                     OrigenActual = CONTROL_LIBRE;
                 }
+
                 estadoMenu = UART_MENU_MAIN;
                 USART_MostrarMenuPrincipal();
+            }
+        }
+        else if (c == 8 || c == 127)
+        {
+            if (rxIndex > 0)
+            {
+                rxIndex--;
             }
         }
         else
@@ -270,7 +386,6 @@ void USART_Task(void)
             if (rxIndex < (sizeof(rxBuffer) - 1))
             {
                 rxBuffer[rxIndex++] = c;
-                USART_SendChar(c);
             }
         }
     }
