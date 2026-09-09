@@ -53,7 +53,6 @@ FRESULT SD_Log_ExisteArchivo(const char *filename)
 
     fr = f_stat(path, &fileInfo);
 
-    /* Si TD2 no existe todavía, el archivo tampoco. */
     if (fr == FR_NO_PATH)
     {
         return FR_NO_FILE;
@@ -84,7 +83,6 @@ FRESULT SD_Log_CrearYEscribir(const char *filename, const char *data)
 
     snprintf(path, sizeof(path), "TD2/%s", filename);
 
-    /* No permite sobrescribir un archivo existente. */
     fr = f_open(&Fil, path, FA_WRITE | FA_CREATE_NEW);
 
     if (fr != FR_OK)
@@ -93,6 +91,47 @@ FRESULT SD_Log_CrearYEscribir(const char *filename, const char *data)
     }
 
     if (strlen(data) > 0)
+    {
+        fr = f_write(&Fil, data, strlen(data), &bytesWritten);
+
+        if (bytesWritten != strlen(data))
+        {
+            fr = FR_DISK_ERR;
+        }
+    }
+
+    f_close(&Fil);
+
+    return fr;
+}
+
+FRESULT SD_Log_AgregarDatos(const char *filename, const char *data)
+{
+    FRESULT fr;
+    UINT bytesWritten;
+    char path[64];
+
+    fr = SD_Montar();
+
+    if (fr != FR_OK)
+    {
+        return fr;
+    }
+
+    snprintf(path, sizeof(path), "TD2/%s", filename);
+
+    /* Abre solamente un archivo existente. */
+    fr = f_open(&Fil, path, FA_WRITE | FA_OPEN_EXISTING);
+
+    if (fr != FR_OK)
+    {
+        return fr;
+    }
+
+    /* Posiciona la escritura al final. */
+    fr = f_lseek(&Fil, f_size(&Fil));
+
+    if (fr == FR_OK && strlen(data) > 0)
     {
         fr = f_write(&Fil, data, strlen(data), &bytesWritten);
 

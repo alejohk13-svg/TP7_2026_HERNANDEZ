@@ -31,7 +31,9 @@ typedef enum {
     UART_MENU_RF,
     UART_MENU_CONFIG,
     UART_MENU_LOG_FILENAME,
-    UART_MENU_LOG_DATA
+    UART_MENU_LOG_DATA,
+    UART_MENU_AGREGAR_FILENAME,
+    UART_MENU_AGREGAR_DATA
 } UART_MenuState_t;
 
 void USARTx_Init(uint32_t baudrate);

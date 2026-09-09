@@ -25,19 +25,19 @@ void USARTx_Init(uint32_t baudrate)
     GPIO_PinAFConfig(GPIOD, USARTx_TX_SOURCE, USARTx_TX_AF);
     GPIO_PinAFConfig(GPIOD, USARTx_RX_SOURCE, USARTx_RX_AF);
 
-    GPIO_InitStructure.GPIO_Pin   = USARTx_TX_PIN | USARTx_RX_PIN;
-    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF;
+    GPIO_InitStructure.GPIO_Pin = USARTx_TX_PIN | USARTx_RX_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
     GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStructure.GPIO_PuPd  = GPIO_PuPd_UP;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOD, &GPIO_InitStructure);
 
-    USART_InitStructure.USART_BaudRate            = baudrate;
-    USART_InitStructure.USART_WordLength          = USART_WordLength_8b;
-    USART_InitStructure.USART_StopBits            = USART_StopBits_1;
-    USART_InitStructure.USART_Parity              = USART_Parity_No;
+    USART_InitStructure.USART_BaudRate = baudrate;
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;
+    USART_InitStructure.USART_Parity = USART_Parity_No;
     USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
-    USART_InitStructure.USART_Mode                = USART_Mode_Rx | USART_Mode_Tx;
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
 
     USART_Init(USARTx, &USART_InitStructure);
     USART_Cmd(USARTx, ENABLE);
@@ -71,73 +71,106 @@ void USART_MostrarMenuPrincipal(void)
 
 void USART_Task(void)
 {
-    if (estadoMenu == UART_MENU_RF)
+	if (estadoMenu == UART_MENU_RF)
+	{
+	    if (EV1527_Disponible())
+	    {
+	        uint32_t codigo = EV1527_GetCodigo();
+	        uint32_t tiempo_actual = getSystick();
+
+	        if (codigo != ultimo_codigo_rf ||
+	            (tiempo_actual - ultimo_tiempo_rf) > 350)
+	        {
+	            char msg[80];
+
+	            ultimo_codigo_rf = codigo;
+	            ultimo_tiempo_rf = tiempo_actual;
+
+	            switch (codigo)
+	            {
+	                case EV1527_BOTON_A:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton A presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                case EV1527_BOTON_B:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton B presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                case EV1527_BOTON_C:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton C presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                case EV1527_BOTON_D:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton D presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                default:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X (Desconocido)\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+	            }
+	        }
+	    }
+	}
+
+    if (USART_GetFlagStatus(USARTx, USART_FLAG_RXNE) == RESET)
     {
-        if (EV1527_Disponible())
-        {
-            uint32_t codigo = EV1527_GetCodigo();
-            uint32_t tiempo_actual = getSystick();
-
-            if (codigo != ultimo_codigo_rf ||
-                (tiempo_actual - ultimo_tiempo_rf) > 350)
-            {
-                ultimo_codigo_rf = codigo;
-                ultimo_tiempo_rf = tiempo_actual;
-
-                char msg[80];
-
-                switch (codigo)
-                {
-                    case EV1527_BOTON_A:
-                        sprintf(msg, "[RF] ID Boton: 0x%06X | Boton A presionado!\r\n", (unsigned int)codigo);
-                        USART_SendString(msg);
-                        break;
-
-                    case EV1527_BOTON_B:
-                        sprintf(msg, "[RF] ID Boton: 0x%06X | Boton B presionado!\r\n", (unsigned int)codigo);
-                        USART_SendString(msg);
-                        break;
-
-                    case EV1527_BOTON_C:
-                        sprintf(msg, "[RF] ID Boton: 0x%06X | Boton C presionado!\r\n", (unsigned int)codigo);
-                        USART_SendString(msg);
-                        break;
-
-                    case EV1527_BOTON_D:
-                        sprintf(msg, "[RF] ID Boton: 0x%06X | Boton D presionado!\r\n", (unsigned int)codigo);
-                        USART_SendString(msg);
-                        break;
-
-                    default:
-                        sprintf(msg, "[RF] ID Boton: 0x%06X (Desconocido)\r\n", (unsigned int)codigo);
-                        USART_SendString(msg);
-                        break;
-                }
-            }
-        }
+        return;
     }
 
-    if (USART_GetFlagStatus(USARTx, USART_FLAG_RXNE) != RESET)
     {
         char c = (char)USART_ReceiveData(USARTx);
 
         if (c == 27)
         {
-            if (estadoMenu == UART_MENU_LOG_DATA)
+            if (estadoMenu == UART_MENU_LOG_DATA ||
+                estadoMenu == UART_MENU_AGREGAR_DATA)
             {
+                FRESULT res;
+
                 logDataBuffer[logDataIndex] = '\0';
 
-                USART_SendString("\r\nGuardando en uSD...\r\n");
-
-                FRESULT res = SD_Log_CrearYEscribir(logFilename, logDataBuffer);
-
-                if (res == FR_OK)
+                if (estadoMenu == UART_MENU_LOG_DATA)
                 {
-                    USART_SendString("[OK] Archivo guardado correctamente\r\n");
+                    USART_SendString("\r\nGuardando en uSD...\r\n");
+                    res = SD_Log_CrearYEscribir(logFilename, logDataBuffer);
+
+                    if (res == FR_OK)
+                    {
+                        USART_SendString("[OK] Archivo guardado correctamente\r\n");
+                    }
+                    else
+                    {
+                        USART_SendString("[ERROR] Fallo al guardar en uSD\r\n");
+                    }
                 }
                 else
                 {
-                    USART_SendString("[ERROR] Fallo al guardar en uSD\r\n");
+                    USART_SendString("\r\nAgregando datos en uSD...\r\n");
+                    res = SD_Log_AgregarDatos(logFilename, logDataBuffer);
+
+                    if (res == FR_OK)
+                    {
+                        USART_SendString("[OK] Datos agregados correctamente\r\n");
+                    }
+                    else
+                    {
+                        USART_SendString("[ERROR] Fallo al agregar datos\r\n");
+                    }
                 }
             }
 
@@ -148,18 +181,19 @@ void USART_Task(void)
             return;
         }
 
-        if (estadoMenu == UART_MENU_LOG_DATA)
+        if (estadoMenu == UART_MENU_LOG_DATA ||
+            estadoMenu == UART_MENU_AGREGAR_DATA)
         {
             if (c == '\r')
             {
-                if (logDataIndex < (sizeof(logDataBuffer) - 1))
+                if (logDataIndex < sizeof(logDataBuffer) - 1)
                 {
                     logDataBuffer[logDataIndex++] = '\n';
                 }
             }
             else if (c == '\n')
             {
-                /* Ignora LF si la terminal ya envio CR. */
+                /* Ignora LF cuando la terminal envía CR+LF. */
             }
             else if (c == 8 || c == 127)
             {
@@ -170,7 +204,7 @@ void USART_Task(void)
             }
             else
             {
-                if (logDataIndex < (sizeof(logDataBuffer) - 1))
+                if (logDataIndex < sizeof(logDataBuffer) - 1)
                 {
                     logDataBuffer[logDataIndex++] = c;
                 }
@@ -197,52 +231,54 @@ void USART_Task(void)
                         int opcion = 0;
                         char basura[32];
 
-                        if (sscanf(rxBuffer, "%d%s", &opcion, basura) == 1)
+                        if (sscanf(rxBuffer, "%d%s", &opcion, basura) != 1)
                         {
-                            if (opcion == 1)
+                            USART_SendString("ERROR: Entrada no valida.\r\n");
+                            USART_MostrarMenuPrincipal();
+                        }
+                        else if (opcion == 1)
+                        {
+                            if (OrigenActual == CONTROL_LCD)
                             {
-                                if (OrigenActual == CONTROL_LCD)
-                                {
-                                    USART_SendString("ERROR: DAC ocupado por LCD!\r\n");
-                                    USART_MostrarMenuPrincipal();
-                                }
-                                else
-                                {
-                                    OrigenActual = CONTROL_UART;
-                                    estadoMenu = UART_MENU_DAC;
-                                    USART_SendString("Ingrese valor milivoltios (0 a 3300 mV): ");
-                                }
-                            }
-                            else if (opcion == 2)
-                            {
-                                estadoMenu = UART_MENU_RF;
-                                USART_SendString("\r\n--- LECTURA RF EN VIVO ---\r\n");
-                                USART_SendString("Presione botones del mando RF. Presione ESC para salir...\r\n");
-                            }
-                            else if (opcion == 3)
-                            {
-                                estadoMenu = UART_MENU_CONFIG;
-                                USART_SendString("Ingrese nuevo baudrate: ");
-                            }
-                            else if (opcion == 4)
-                            {
-                                estadoMenu = UART_MENU_LOG_FILENAME;
-                                USART_SendString("Nombre de archivo: ");
-                            }
-                            else if (opcion == 5 || opcion == 6)
-                            {
-                                USART_SendString("Opcion en desarrollo...\r\n");
+                                USART_SendString("ERROR: DAC ocupado por LCD!\r\n");
                                 USART_MostrarMenuPrincipal();
                             }
                             else
                             {
-                                USART_SendString("ERROR: Opcion invalida. Ingrese un numero del 1 al 6.\r\n");
-                                USART_MostrarMenuPrincipal();
+                                OrigenActual = CONTROL_UART;
+                                estadoMenu = UART_MENU_DAC;
+                                USART_SendString("Ingrese valor milivoltios (0 a 3300 mV): ");
                             }
+                        }
+                        else if (opcion == 2)
+                        {
+                            estadoMenu = UART_MENU_RF;
+                            USART_SendString("\r\n--- LECTURA RF EN VIVO ---\r\n");
+                            USART_SendString("Presione ESC para salir...\r\n");
+                        }
+                        else if (opcion == 3)
+                        {
+                            estadoMenu = UART_MENU_CONFIG;
+                            USART_SendString("Ingrese nuevo baudrate: ");
+                        }
+                        else if (opcion == 4)
+                        {
+                            estadoMenu = UART_MENU_LOG_FILENAME;
+                            USART_SendString("Nombre de archivo: ");
+                        }
+                        else if (opcion == 5)
+                        {
+                            estadoMenu = UART_MENU_AGREGAR_FILENAME;
+                            USART_SendString("Nombre de archivo: ");
+                        }
+                        else if (opcion == 6)
+                        {
+                            USART_SendString("Opcion en desarrollo...\r\n");
+                            USART_MostrarMenuPrincipal();
                         }
                         else
                         {
-                            USART_SendString("ERROR: Entrada no valida.\r\n");
+                            USART_SendString("ERROR: Opcion invalida. Ingrese un numero del 1 al 6.\r\n");
                             USART_MostrarMenuPrincipal();
                         }
 
@@ -251,9 +287,10 @@ void USART_Task(void)
 
                     case UART_MENU_LOG_FILENAME:
                     {
-                        USART_SendString("Verificando archivo en microSD...\r\n");
+                        FRESULT res;
 
-                        FRESULT res = SD_Log_ExisteArchivo(rxBuffer);
+                        USART_SendString("Verificando archivo en microSD...\r\n");
+                        res = SD_Log_ExisteArchivo(rxBuffer);
 
                         if (res == FR_OK)
                         {
@@ -279,35 +316,63 @@ void USART_Task(void)
                         USART_SendString("Ingrese Datos (Presione ESC para finalizar y guardar):\r\n");
                         break;
                     }
+
+                    case UART_MENU_AGREGAR_FILENAME:
+                    {
+                        FRESULT res;
+
+                        USART_SendString("Verificando archivo en microSD...\r\n");
+                        res = SD_Log_ExisteArchivo(rxBuffer);
+
+                        if (res == FR_NO_FILE)
+                        {
+                            USART_SendString("archivo no encontrado\r\n");
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
+                            break;
+                        }
+
+                        if (res != FR_OK)
+                        {
+                            USART_SendString("ERROR: no se pudo verificar la microSD.\r\n");
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
+                            break;
+                        }
+
+                        strncpy(logFilename, rxBuffer, sizeof(logFilename) - 1);
+                        logFilename[sizeof(logFilename) - 1] = '\0';
+
+                        logDataIndex = 0;
+                        memset(logDataBuffer, 0, sizeof(logDataBuffer));
+
+                        estadoMenu = UART_MENU_AGREGAR_DATA;
+                        USART_SendString("Ingrese Datos (Presione ESC para finalizar y guardar):\r\n");
+                        break;
+                    }
+
                     case UART_MENU_DAC:
                     {
                         int mv = 0;
                         char basura[32];
 
-                        if (sscanf(rxBuffer, "%d%s", &mv, basura) == 1)
+                        if (sscanf(rxBuffer, "%d%s", &mv, basura) == 1 &&
+                            mv >= 0 && mv <= 3300)
                         {
-                            if (mv >= 0 && mv <= 3300)
-                            {
-                                uint32_t cuentas = ((uint32_t)mv * 4095) / 3300;
-                                DAC_SetChannel2Data(DAC_Align_12b_R, cuentas);
+                            uint32_t cuentas = ((uint32_t)mv * 4095) / 3300;
+                            char bufferOut[64];
 
-                                char bufferOut[64];
-                                sprintf(bufferOut, "DAC actualizado a %d mV.\r\n", mv);
-                                USART_SendString(bufferOut);
+                            DAC_SetChannel2Data(DAC_Align_12b_R, cuentas);
+                            sprintf(bufferOut, "DAC actualizado a %d mV.\r\n", mv);
+                            USART_SendString(bufferOut);
 
-                                OrigenActual = CONTROL_LIBRE;
-                                estadoMenu = UART_MENU_MAIN;
-                                USART_MostrarMenuPrincipal();
-                            }
-                            else
-                            {
-                                USART_SendString("ERROR: Valor fuera de rango (0 a 3300 mV).\r\n");
-                                USART_SendString("Ingrese valor milivoltios (0 a 3300 mV): ");
-                            }
+                            OrigenActual = CONTROL_LIBRE;
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
                         }
                         else
                         {
-                            USART_SendString("ERROR: Debe ingresar un valor puramente numerico.\r\n");
+                            USART_SendString("ERROR: Valor invalido (0 a 3300 mV).\r\n");
                             USART_SendString("Ingrese valor milivoltios (0 a 3300 mV): ");
                         }
 
@@ -325,30 +390,24 @@ void USART_Task(void)
                         uint32_t nuevoBaud = 0;
                         char basura[32];
 
-                        if (sscanf(rxBuffer, "%lu%s", &nuevoBaud, basura) == 1)
+                        if (sscanf(rxBuffer, "%lu%s", &nuevoBaud, basura) == 1 &&
+                            nuevoBaud >= 1200 && nuevoBaud <= 2500000)
                         {
-                            if (nuevoBaud >= 1200 && nuevoBaud <= 2500000)
-                            {
-                                char bufferOut[64];
-                                sprintf(bufferOut, "Reconfigurando UART a %lu baudios...\r\n", nuevoBaud);
-                                USART_SendString(bufferOut);
+                            char bufferOut[64];
 
-                                while (USART_GetFlagStatus(USARTx, USART_FLAG_TC) == RESET);
+                            sprintf(bufferOut, "Reconfigurando UART a %lu baudios...\r\n", nuevoBaud);
+                            USART_SendString(bufferOut);
 
-                                USARTx_Init(nuevoBaud);
+                            while (USART_GetFlagStatus(USARTx, USART_FLAG_TC) == RESET);
 
-                                estadoMenu = UART_MENU_MAIN;
-                                USART_MostrarMenuPrincipal();
-                            }
-                            else
-                            {
-                                USART_SendString("ERROR: Baudrate fuera de rango permitido.\r\n");
-                                USART_SendString("Ingrese nuevo baudrate: ");
-                            }
+                            USARTx_Init(nuevoBaud);
+
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
                         }
                         else
                         {
-                            USART_SendString("ERROR: Debe ingresar un valor puramente numerico.\r\n");
+                            USART_SendString("ERROR: Baudrate fuera de rango permitido.\r\n");
                             USART_SendString("Ingrese nuevo baudrate: ");
                         }
 
@@ -383,7 +442,7 @@ void USART_Task(void)
         }
         else
         {
-            if (rxIndex < (sizeof(rxBuffer) - 1))
+            if (rxIndex < sizeof(rxBuffer) - 1)
             {
                 rxBuffer[rxIndex++] = c;
             }

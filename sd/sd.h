@@ -9,5 +9,6 @@
 FRESULT SD_Init_FatFS(void);
 FRESULT SD_Log_ExisteArchivo(const char *filename);
 FRESULT SD_Log_CrearYEscribir(const char *filename, const char *data);
+FRESULT SD_Log_AgregarDatos(const char *filename, const char *data);
 
 #endif /* SD_H_ */
