@@ -273,8 +273,8 @@ void USART_Task(void)
                         }
                         else if (opcion == 6)
                         {
-                            USART_SendString("Opcion en desarrollo...\r\n");
-                            USART_MostrarMenuPrincipal();
+                            estadoMenu = UART_MENU_BORRAR_FILENAME;
+                            USART_SendString("Nombre de archivo a borrar: ");
                         }
                         else
                         {
@@ -348,6 +348,34 @@ void USART_Task(void)
 
                         estadoMenu = UART_MENU_AGREGAR_DATA;
                         USART_SendString("Ingrese Datos (Presione ESC para finalizar y guardar):\r\n");
+                        break;
+                    }
+
+                    case UART_MENU_BORRAR_FILENAME:
+                    {
+                        FRESULT res;
+
+                        USART_SendString("Verificando archivo en microSD...\r\n");
+
+                        res = SD_Log_BorrarArchivo(rxBuffer);
+
+                        if (res == FR_OK)
+                        {
+                            USART_SendString("Borrado Exitoso\r\n");
+                        }
+                        else if (res == FR_NO_FILE)
+                        {
+                            USART_SendString("El archivo \"");
+                            USART_SendString(rxBuffer);
+                            USART_SendString("\" no existe\r\n");
+                        }
+                        else
+                        {
+                            USART_SendString("ERROR: no se pudo acceder a la microSD.\r\n");
+                        }
+
+                        estadoMenu = UART_MENU_MAIN;
+                        USART_MostrarMenuPrincipal();
                         break;
                     }
 

@@ -145,3 +145,28 @@ FRESULT SD_Log_AgregarDatos(const char *filename, const char *data)
 
     return fr;
 }
+
+FRESULT SD_Log_BorrarArchivo(const char *filename)
+{
+    FRESULT fr;
+    char path[64];
+
+    fr = SD_Montar();
+
+    if (fr != FR_OK)
+    {
+        return fr;
+    }
+
+    snprintf(path, sizeof(path), "TD2/%s", filename);
+
+    fr = f_unlink(path);
+
+    /* TD2 inexistente equivale a archivo inexistente. */
+    if (fr == FR_NO_PATH)
+    {
+        return FR_NO_FILE;
+    }
+
+    return fr;
+}

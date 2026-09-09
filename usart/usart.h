@@ -33,9 +33,11 @@ typedef enum {
     UART_MENU_LOG_FILENAME,
     UART_MENU_LOG_DATA,
     UART_MENU_AGREGAR_FILENAME,
-    UART_MENU_AGREGAR_DATA
+    UART_MENU_AGREGAR_DATA,
+    UART_MENU_BORRAR_FILENAME
 } UART_MenuState_t;
 
+FRESULT SD_Log_BorrarArchivo(const char *filename);
 void USARTx_Init(uint32_t baudrate);
 void USART_SendChar(char c);
 void USART_SendString(const char *str);
