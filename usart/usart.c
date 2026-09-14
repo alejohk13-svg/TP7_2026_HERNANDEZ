@@ -1,0 +1,479 @@
+#include "usart.h"
+#include "../GLOBAL/global.h"
+#include "../ev1527/ev1527.h"
+#include "../sd/sd.h"
+
+static UART_MenuState_t estadoMenu = UART_MENU_MAIN;
+static char rxBuffer[128];
+static uint8_t rxIndex = 0;
+
+static char logFilename[32];
+static char logDataBuffer[512];
+static uint16_t logDataIndex = 0;
+
+static uint32_t ultimo_tiempo_rf = 0;
+static uint32_t ultimo_codigo_rf = 0;
+
+void USARTx_Init(uint32_t baudrate)
+{
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+
+    RCC_APB1PeriphClockCmd(USARTx_CLK, ENABLE);
+    RCC_AHB1PeriphClockCmd(USARTx_GPIO_CLK, ENABLE);
+
+    GPIO_PinAFConfig(GPIOD, USARTx_TX_SOURCE, USARTx_TX_AF);
+    GPIO_PinAFConfig(GPIOD, USARTx_RX_SOURCE, USARTx_RX_AF);
+
+    GPIO_InitStructure.GPIO_Pin = USARTx_TX_PIN | USARTx_RX_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOD, &GPIO_InitStructure);
+
+    USART_InitStructure.USART_BaudRate = baudrate;
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;
+    USART_InitStructure.USART_Parity = USART_Parity_No;
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+
+    USART_Init(USARTx, &USART_InitStructure);
+    USART_Cmd(USARTx, ENABLE);
+}
+
+void USART_SendChar(char c)
+{
+    while (USART_GetFlagStatus(USARTx, USART_FLAG_TXE) == RESET);
+    USART_SendData(USARTx, c);
+}
+
+void USART_SendString(const char *str)
+{
+    while (*str)
+    {
+        USART_SendChar(*str++);
+    }
+}
+
+void USART_MostrarMenuPrincipal(void)
+{
+    USART_SendString("\r\n=== MENU PRINCIPAL UART ===\r\n");
+    USART_SendString("1. Control de DAC\r\n");
+    USART_SendString("2. Lectura RF\r\n");
+    USART_SendString("3. Control Baudrate\r\n");
+    USART_SendString("4. Log de texto\r\n");
+    USART_SendString("5. Agregar datos\r\n");
+    USART_SendString("6. Borrar archivo\r\n");
+    USART_SendString("Seleccione una opcion (1-6): ");
+}
+
+void USART_Task(void)
+{
+	if (estadoMenu == UART_MENU_RF)
+	{
+	    if (EV1527_Disponible())
+	    {
+	        uint32_t codigo = EV1527_GetCodigo();
+	        uint32_t tiempo_actual = getSystick();
+
+	        if (codigo != ultimo_codigo_rf ||
+	            (tiempo_actual - ultimo_tiempo_rf) > 350)
+	        {
+	            char msg[80];
+
+	            ultimo_codigo_rf = codigo;
+	            ultimo_tiempo_rf = tiempo_actual;
+
+	            switch (codigo)
+	            {
+	                case EV1527_BOTON_A:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton A presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                case EV1527_BOTON_B:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton B presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                case EV1527_BOTON_C:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton C presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                case EV1527_BOTON_D:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X | Boton D presionado!\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+
+	                default:
+	                    sprintf(msg,
+	                            "[RF] ID Boton: 0x%06X (Desconocido)\r\n",
+	                            (unsigned int)codigo);
+	                    USART_SendString(msg);
+	                    break;
+	            }
+	        }
+	    }
+	}
+
+    if (USART_GetFlagStatus(USARTx, USART_FLAG_RXNE) == RESET)
+    {
+        return;
+    }
+
+    {
+        char c = (char)USART_ReceiveData(USARTx);
+
+        if (c == 27)
+        {
+            if (estadoMenu == UART_MENU_LOG_DATA ||
+                estadoMenu == UART_MENU_AGREGAR_DATA)
+            {
+                FRESULT res;
+
+                logDataBuffer[logDataIndex] = '\0';
+
+                if (estadoMenu == UART_MENU_LOG_DATA)
+                {
+                    USART_SendString("\r\nGuardando en uSD...\r\n");
+                    res = SD_Log_CrearYEscribir(logFilename, logDataBuffer);
+
+                    if (res == FR_OK)
+                    {
+                        USART_SendString("[OK] Archivo guardado correctamente\r\n");
+                    }
+                    else
+                    {
+                        USART_SendString("[ERROR] Fallo al guardar en uSD\r\n");
+                    }
+                }
+                else
+                {
+                    USART_SendString("\r\nAgregando datos en uSD...\r\n");
+                    res = SD_Log_AgregarDatos(logFilename, logDataBuffer);
+
+                    if (res == FR_OK)
+                    {
+                        USART_SendString("[OK] Datos agregados correctamente\r\n");
+                    }
+                    else
+                    {
+                        USART_SendString("[ERROR] Fallo al agregar datos\r\n");
+                    }
+                }
+            }
+
+            rxIndex = 0;
+            logDataIndex = 0;
+            estadoMenu = UART_MENU_MAIN;
+            USART_MostrarMenuPrincipal();
+            return;
+        }
+
+        if (estadoMenu == UART_MENU_LOG_DATA ||
+            estadoMenu == UART_MENU_AGREGAR_DATA)
+        {
+            if (c == '\r')
+            {
+                if (logDataIndex < sizeof(logDataBuffer) - 1)
+                {
+                    logDataBuffer[logDataIndex++] = '\n';
+                }
+            }
+            else if (c == '\n')
+            {
+                /* Ignora LF cuando la terminal envía CR+LF. */
+            }
+            else if (c == 8 || c == 127)
+            {
+                if (logDataIndex > 0)
+                {
+                    logDataIndex--;
+                }
+            }
+            else
+            {
+                if (logDataIndex < sizeof(logDataBuffer) - 1)
+                {
+                    logDataBuffer[logDataIndex++] = c;
+                }
+            }
+
+            return;
+        }
+
+        if (c == '\r' || c == '\n')
+        {
+            if (c == '\r')
+            {
+                USART_SendString("\r\n");
+            }
+
+            if (rxIndex > 0)
+            {
+                rxBuffer[rxIndex] = '\0';
+
+                switch (estadoMenu)
+                {
+                    case UART_MENU_MAIN:
+                    {
+                        int opcion = 0;
+                        char basura[32];
+
+                        if (sscanf(rxBuffer, "%d%s", &opcion, basura) != 1)
+                        {
+                            USART_SendString("ERROR: Entrada no valida.\r\n");
+                            USART_MostrarMenuPrincipal();
+                        }
+                        else if (opcion == 1)
+                        {
+                            if (OrigenActual == CONTROL_LCD)
+                            {
+                                USART_SendString("ERROR: DAC ocupado por LCD!\r\n");
+                                USART_MostrarMenuPrincipal();
+                            }
+                            else
+                            {
+                                OrigenActual = CONTROL_UART;
+                                estadoMenu = UART_MENU_DAC;
+                                USART_SendString("Ingrese valor milivoltios (0 a 3300 mV): ");
+                            }
+                        }
+                        else if (opcion == 2)
+                        {
+                            estadoMenu = UART_MENU_RF;
+                            USART_SendString("\r\n--- LECTURA RF EN VIVO ---\r\n");
+                            USART_SendString("Presione ESC para salir...\r\n");
+                        }
+                        else if (opcion == 3)
+                        {
+                            estadoMenu = UART_MENU_CONFIG;
+                            USART_SendString("Ingrese nuevo baudrate: ");
+                        }
+                        else if (opcion == 4)
+                        {
+                            estadoMenu = UART_MENU_LOG_FILENAME;
+                            USART_SendString("Nombre de archivo: ");
+                        }
+                        else if (opcion == 5)
+                        {
+                            estadoMenu = UART_MENU_AGREGAR_FILENAME;
+                            USART_SendString("Nombre de archivo: ");
+                        }
+                        else if (opcion == 6)
+                        {
+                            estadoMenu = UART_MENU_BORRAR_FILENAME;
+                            USART_SendString("Nombre de archivo a borrar: ");
+                        }
+                        else
+                        {
+                            USART_SendString("ERROR: Opcion invalida. Ingrese un numero del 1 al 6.\r\n");
+                            USART_MostrarMenuPrincipal();
+                        }
+
+                        break;
+                    }
+
+                    case UART_MENU_LOG_FILENAME:
+                    {
+                        FRESULT res;
+
+                        USART_SendString("Verificando archivo en microSD...\r\n");
+                        res = SD_Log_ExisteArchivo(rxBuffer);
+
+                        if (res == FR_OK)
+                        {
+                            USART_SendString("ERROR: archivo ya existente.\r\n");
+                            USART_SendString("Ingrese un nuevo nombre de archivo: ");
+                            break;
+                        }
+
+                        if (res != FR_NO_FILE)
+                        {
+                            USART_SendString("ERROR: no se pudo verificar la microSD.\r\n");
+                            USART_SendString("Nombre de archivo: ");
+                            break;
+                        }
+
+                        strncpy(logFilename, rxBuffer, sizeof(logFilename) - 1);
+                        logFilename[sizeof(logFilename) - 1] = '\0';
+
+                        logDataIndex = 0;
+                        memset(logDataBuffer, 0, sizeof(logDataBuffer));
+
+                        estadoMenu = UART_MENU_LOG_DATA;
+                        USART_SendString("Ingrese Datos (Presione ESC para finalizar y guardar):\r\n");
+                        break;
+                    }
+
+                    case UART_MENU_AGREGAR_FILENAME:
+                    {
+                        FRESULT res;
+
+                        USART_SendString("Verificando archivo en microSD...\r\n");
+                        res = SD_Log_ExisteArchivo(rxBuffer);
+
+                        if (res == FR_NO_FILE)
+                        {
+                            USART_SendString("archivo no encontrado\r\n");
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
+                            break;
+                        }
+
+                        if (res != FR_OK)
+                        {
+                            USART_SendString("ERROR: no se pudo verificar la microSD.\r\n");
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
+                            break;
+                        }
+
+                        strncpy(logFilename, rxBuffer, sizeof(logFilename) - 1);
+                        logFilename[sizeof(logFilename) - 1] = '\0';
+
+                        logDataIndex = 0;
+                        memset(logDataBuffer, 0, sizeof(logDataBuffer));
+
+                        estadoMenu = UART_MENU_AGREGAR_DATA;
+                        USART_SendString("Ingrese Datos (Presione ESC para finalizar y guardar):\r\n");
+                        break;
+                    }
+
+                    case UART_MENU_BORRAR_FILENAME:
+                    {
+                        FRESULT res;
+
+                        USART_SendString("Verificando archivo en microSD...\r\n");
+
+                        res = SD_Log_BorrarArchivo(rxBuffer);
+
+                        if (res == FR_OK)
+                        {
+                            USART_SendString("Borrado Exitoso\r\n");
+                        }
+                        else if (res == FR_NO_FILE)
+                        {
+                            USART_SendString("El archivo \"");
+                            USART_SendString(rxBuffer);
+                            USART_SendString("\" no existe\r\n");
+                        }
+                        else
+                        {
+                            USART_SendString("ERROR: no se pudo acceder a la microSD.\r\n");
+                        }
+
+                        estadoMenu = UART_MENU_MAIN;
+                        USART_MostrarMenuPrincipal();
+                        break;
+                    }
+
+                    case UART_MENU_DAC:
+                    {
+                        int mv = 0;
+                        char basura[32];
+
+                        if (sscanf(rxBuffer, "%d%s", &mv, basura) == 1 &&
+                            mv >= 0 && mv <= 3300)
+                        {
+                            uint32_t cuentas = ((uint32_t)mv * 4095) / 3300;
+                            char bufferOut[64];
+
+                            DAC_SetChannel2Data(DAC_Align_12b_R, cuentas);
+                            sprintf(bufferOut, "DAC actualizado a %d mV.\r\n", mv);
+                            USART_SendString(bufferOut);
+
+                            OrigenActual = CONTROL_LIBRE;
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
+                        }
+                        else
+                        {
+                            USART_SendString("ERROR: Valor invalido (0 a 3300 mV).\r\n");
+                            USART_SendString("Ingrese valor milivoltios (0 a 3300 mV): ");
+                        }
+
+                        break;
+                    }
+
+                    case UART_MENU_RF:
+                    {
+                        USART_SendString("Presione ESC para salir del modo RF.\r\n");
+                        break;
+                    }
+
+                    case UART_MENU_CONFIG:
+                    {
+                        uint32_t nuevoBaud = 0;
+                        char basura[32];
+
+                        if (sscanf(rxBuffer, "%lu%s", &nuevoBaud, basura) == 1 &&
+                            nuevoBaud >= 1200 && nuevoBaud <= 2500000)
+                        {
+                            char bufferOut[64];
+
+                            sprintf(bufferOut, "Reconfigurando UART a %lu baudios...\r\n", nuevoBaud);
+                            USART_SendString(bufferOut);
+
+                            while (USART_GetFlagStatus(USARTx, USART_FLAG_TC) == RESET);
+
+                            USARTx_Init(nuevoBaud);
+
+                            estadoMenu = UART_MENU_MAIN;
+                            USART_MostrarMenuPrincipal();
+                        }
+                        else
+                        {
+                            USART_SendString("ERROR: Baudrate fuera de rango permitido.\r\n");
+                            USART_SendString("Ingrese nuevo baudrate: ");
+                        }
+
+                        break;
+                    }
+
+                    default:
+                        estadoMenu = UART_MENU_MAIN;
+                        USART_MostrarMenuPrincipal();
+                        break;
+                }
+
+                rxIndex = 0;
+            }
+            else
+            {
+                if (estadoMenu == UART_MENU_DAC)
+                {
+                    OrigenActual = CONTROL_LIBRE;
+                }
+
+                estadoMenu = UART_MENU_MAIN;
+                USART_MostrarMenuPrincipal();
+            }
+        }
+        else if (c == 8 || c == 127)
+        {
+            if (rxIndex > 0)
+            {
+                rxIndex--;
+            }
+        }
+        else
+        {
+            if (rxIndex < sizeof(rxBuffer) - 1)
+            {
+                rxBuffer[rxIndex++] = c;
+            }
+        }
+    }
+}
